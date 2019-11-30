@@ -1,71 +1,76 @@
 #include <cstrike>
 
-#define MOD_TAG "\x01\x0B★ \x07[StudioADEPT]\x04 "
+#pragma semicolon 1
+#pragma newdecls required
 
-ConVar b_enable;
+ConVar gc_Enable, gc_AllowAdmin, gc_MOD_TAG, gc_ChangeTeamNotification;
+
+char MOD_TAG[64];
 
 public Plugin myinfo = 
 {
 	name = "ADEPT --> BlockTeamChange", 
 	description = "Autorski Plugin StudioADEPT.net", 
 	author = "Brum Brum", 
-	version = "0.1", 
+	version = "1.0", 
 	url = "http://www.StudioADEPT.net/forum", 
 };
 
 public void OnPluginStart()
 {
-	b_enable = CreateConVar("sm_btc", "1", "1-Zakazuje zmiany teamu po wybraniu 0-Zezwala na zmianę teamu");
-	
+	gc_Enable = CreateConVar("sm_blockteamchange_enable", "1", "1-Zakazuje zmiany teamu po wybraniu 0-Zezwala na zmianę teamu", _, true, 0.0, true, 1.0);
+	gc_AllowAdmin = CreateConVar("sm_blockteamchange_admin", "0", "1-Zezwala na zmiane teamu adminom", _, true, 0.0, true, 1.0);
+	gc_ChangeTeamNotification = CreateConVar("sm_blockteamchange_notification", "1", "0-off 1-chat 2-hint", _, true, 0.0, true, 2.0);
+	gc_MOD_TAG = CreateConVar("sm_blockteamchange_mod_tag", "ADEPT", "TAG pokazywany na czacie/hudzie");
+	gc_MOD_TAG.AddChangeHook(MOD_TAGNameChanged);
+	gc_MOD_TAG.GetString(MOD_TAG, sizeof(MOD_TAG));
 	AddCommandListener(JoinTeam, "jointeam");
 	AddCommandListener(JoinTeam, "spectate");
+	AutoExecConfig(true, "ADEPT_BlockTeamChange");
+}
+
+public void MOD_TAGNameChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	Format(MOD_TAG, sizeof(MOD_TAG), newValue);
 }
 
 public Action JoinTeam(int client, const char[] command, int args)
 {
-	int aktteam = GetClientTeam(client);
-	if(GetConVarInt(b_enable) == 1)
+	if (!gc_Enable.BoolValue)return Plugin_Continue;
+	
+	if (GetClientTeam(client) == CS_TEAM_NONE || GetClientTeam(client) == CS_TEAM_SPECTATOR)return Plugin_Continue;
+	
+	if (gc_AllowAdmin.BoolValue && IsPlayerAdmin(client))return Plugin_Continue;
+	
+	NotifyClient(client);
+	return Plugin_Handled;
+}
+
+void NotifyClient(int client)
+{
+	if (!IsValidClient(client))return;
+	if (!gc_ChangeTeamNotification.BoolValue)return;
+	
+	switch (gc_ChangeTeamNotification.IntValue)
 	{
-		if(GetClientTeam(client) == 1)
-		{
-			return Plugin_Continue;
-		}
-		if(aktteam > CS_TEAM_CT)
-		{
-			if(GetUserFlagBits(client) & ADMFLAG_GENERIC)
-			{
-				return Plugin_Continue;
-			}
-			else
-			{
-				PrintToChat(client, "%s Zmiana teamu została zablokowana", MOD_TAG);
-				return Plugin_Handled;
-			}
-		}
-		if(aktteam > CS_TEAM_T)
-		{
-			if(GetUserFlagBits(client) & ADMFLAG_GENERIC)
-			{
-				return Plugin_Continue;
-			}
-			else
-			{
-				PrintToChat(client, "%s Zmiana teamu została zablokowana", MOD_TAG);
-				return Plugin_Handled;
-			}
-		}
-		if(aktteam > CS_TEAM_SPECTATOR)
-		{
-			if(GetUserFlagBits(client) & ADMFLAG_GENERIC)
-			{
-				return Plugin_Continue;
-			}
-			else
-			{
-				PrintToChat(client, "%s Zmiana teamu została zablokowana", MOD_TAG);
-				return Plugin_Handled;
-			}
-		}
+		case 1:PrintToChat(client, "\x01\x0B★ \x07[%s -> BlockTeamChange]\x04 Zmiana teamu została zablokowana!", MOD_TAG);
+		case 2:PrintHintText(client, "<font color='#ff0000'>[%s -> BlockTeamChange]\n<font color='#00ff00'>Zmiana teamu została zablokowana!</font>", MOD_TAG);
 	}
-	return Plugin_Continue;
-}﻿
+	return;
+}
+
+bool IsPlayerAdmin(int client)
+{
+	if (GetUserFlagBits(client) & ADMFLAG_GENERIC)return true;
+	if (GetUserFlagBits(client) & ADMFLAG_ROOT)return true;
+	
+	return false;
+}
+
+bool IsValidClient(int client)
+{
+	if (!(1 <= client <= MaxClients) || !IsClientInGame(client) || !IsClientConnected(client) || IsFakeClient(client) || IsClientSourceTV(client))
+		return false;
+	
+	return true;
+} 
